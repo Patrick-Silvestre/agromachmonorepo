@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Configuracao base de renderizacao para tema claro. */
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-body), sans-serif;
+  background: #f2f5f1;
+  color: #112015;
+}
+
+/* Mantem hierarquia tipografica com fonte de titulo. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading), sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Casca visual das telas publicas (home/login/cadastro). */
+.public-shell {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f9fbf8 0%, #f2f5f1 62%, #eff3ee 100%);
+}
+
+/* Wrapper de largura maxima para conteudo responsivo. */
+.public-container {
+  width: min(1120px, 100% - 2.25rem);
+  margin-inline: auto;
+}
+
+/* Barra superior publica, fixa no estilo de marca. */
+.public-topbar {
+  border-bottom: 1px solid #d6dfd1;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+}
+
+/* Espacamento vertical principal das paginas publicas. */
+.public-main {
+  padding: 1.8rem 0 3.5rem;
+}
+
+/* Fundo geral das telas privadas. */
+.app-shell {
+  min-height: 100vh;
+  background: #edf2ed;
+}
+
+/* Grid principal: sidebar + conteudo. */
+.app-container {
+  width: min(1400px, 100% - 2rem);
+  margin-inline: auto;
+  padding: 1rem 0 1.5rem;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 1rem;
+}
+
+/* Barra superior privada do painel. */
+.app-topbar {
+  border-bottom: 1px solid #d7dfd3;
+  background: #ffffff;
+}
+
+.app-topbar-inner {
+  width: min(1400px, 100% - 2rem);
+  margin-inline: auto;
+  height: 62px;
+}
+
+@media (max-width: 1024px) {
+  /* No mobile, vira coluna unica para facilitar navegacao. */
+  .app-container {
+    grid-template-columns: 1fr;
+    width: min(1400px, 100% - 1rem);
+    padding-top: 0.75rem;
+  }
+
+  .app-topbar-inner {
+    width: min(1400px, 100% - 1rem);
+    height: auto;
+    padding: 0.7rem 0;
+  }
+}
+
+/* Cartao base reutilizado em praticamente todas as telas. */
+.surface {
+  border: 1px solid #d2dbce;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 16px 32px -26px rgba(19, 40, 24, 0.42);
+}
+
+/* Gradiente da faixa de marca usada em secoes especiais. */
+.brand-bar {
+  background: linear-gradient(90deg, #1f6e3b 0%, #2a7f45 100%);
+  color: #f3fbf5;
+}
+
+/* Selo de status para contexto rapido de perfil/origem. */
+.status-chip {
+  border: 1px solid rgba(31, 110, 59, 0.22);
+  background: rgba(43, 140, 71, 0.1);
+  color: #215f36;
+  border-radius: 999px;
+  padding: 0.2rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
