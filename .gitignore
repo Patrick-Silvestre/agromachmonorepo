@@ -4,9 +4,13 @@ node_modules
 .next
 dist
 coverage
+*.tsbuildinfo
 
 .env
 .env.*
 !.env.local.example
+
+# Claude Code (configuracao local de cada maquina)
+.claude/
 
 .DS_Store

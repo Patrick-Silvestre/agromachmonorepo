@@ -1,334 +1,421 @@
-# Nex Rural Monorepo
+# Nex Rural Frontend
 
-Frontend do `webapp nex-rural` organizado em monorepo com Turborepo.
+Frontend do Nex Rural: o cockpit operacional de uma fazenda (funcionarios, maquinas,
+pasto/talhao/confinamento, avisos de manejo e clima) mais uma rede de contatos de
+veterinarios, agronomos e fornecedores.
 
-Objetivo de negocio do sistema:
+Este repositorio contem somente o frontend Next.js conectado a uma REST API.
+Quando a API ainda nao retorna dados, o app usa mocks locais de demonstracao.
+Assim que o backend devolve registros reais, os mocks deixam de aparecer.
 
-- ser o intermediador digital do agro entre aluguel de maquinarios, compra e venda e prestadores de servicos
-- oferecer area privada de gestao por perfil, sem exibir rotas restritas para usuarios sem permissao
+---
 
-## 1. Visao de Arquitetura
+## 1. Objetivo Do Projeto
 
-Arquitetura adotada:
+O Nex Rural foi reduzido de proposito a duas frentes, depois de uma revisao de
+escopo (o projeto comecou maior, incluindo marketplace de maquinas/insumos e um
+feed social - ambos removidos):
 
-- Monorepo com Turborepo + pnpm workspace
-- App frontend em Next.js App Router
-- Camadas separadas por responsabilidade (`app`, `components`, `hooks`, `services`, `lib`, `types`)
-- Controle de acesso por papel no frontend para visibilidade de modulo
+- **Cockpit da fazenda**: visao unica de equipe, maquinario por status,
+  ocupacao de pasto/talhao/confinamento, avisos de manejo e previsao do tempo.
+- **Rede de contatos**: diretorio de veterinarios, agronomos e fornecedores
+  (insumo/semente e gado, com ou sem rastreabilidade) - contato direto via
+  WhatsApp, sem carrinho nem pedido.
 
-Motivo dessa arquitetura:
+O frontend tambem possui area privada com controle de acesso por perfil. Isso
+significa que cada usuario enxerga somente os modulos permitidos para seu papel
+(`CLIENTE`, `PRESTADOR` ou `ADMIN` - os unicos que o backend realmente emite).
 
-- centraliza codigo compartilhado e reduz duplicacao
-- facilita escalar para novos apps/pacotes sem reestruturar tudo
-- melhora manutencao para equipe de TCC (cada pasta tem papel claro)
-- prepara o frontend para backend real (JWT, interceptors, tratamento de erro)
+---
 
-## 1.1 Diagrama de Fluxo (ASCII)
+## 2. Stack E Por Que Cada Tecnologia Foi Escolhida
+
+### Next.js
+
+O Next.js foi escolhido porque organiza rotas, layouts e paginas dentro do
+`src/app`. Ele facilita criar telas publicas e privadas sem configurar roteador
+manual.
+
+No projeto:
+
+- `src/app/(public)` contem home, login e cadastro;
+- `src/app/(app)` contem dashboard e modulos autenticados;
+- `src/app/layout.tsx` aplica fontes, estilos globais e contexto de auth.
+
+### React
+
+React e a base de componentes. Cada parte visual reutilizavel fica isolada em
+componentes pequenos.
+
+No projeto:
+
+- formularios ficam em `src/components/auth`;
+- menu privado fica em `src/components/layout`;
+- tabela generica (modulos legados) fica em `src/components/modules`;
+- UI base (Button, Card, Input, Select, Field) fica em `src/components/ui`.
+
+### TypeScript
+
+TypeScript foi escolhido para documentar contratos e reduzir erro de integracao
+com a API.
+
+No projeto:
+
+- `src/types/auth.ts` define login, cadastro e sessao;
+- `src/types/dashboard.ts` define o shape do cockpit (`GET /api/dashboard`);
+- `src/types/operacao.ts` define os requests de Area de Producao, Aviso e Profissional;
+- `src/types/api.ts` define erro padronizado;
+- `src/types/user.ts` define dados do usuario.
+
+### Tailwind CSS
+
+Tailwind CSS foi escolhido para estilizar rapido, mantendo consistencia visual.
+O tema e escuro, minimalista e com poucas cores (fundo quase preto, um verde
+vibrante como acento, tipografia limpa) - a ideia e parecer premium sem virar
+"arvore de natal" cheia de gradiente e brilho em tudo.
+
+Toda a paleta vive em dois lugares: `tailwind.config.ts` (tokens de cor/sombra)
+e `src/app/globals.css` (classes compartilhadas como `.surface`, `.status-chip`,
+`.reveal`, `.skeleton`). Mudar o tema todo comeca por esses dois arquivos -
+como cada tela usa as mesmas classes, a mudanca se propaga sozinha.
+
+Animacao e propositalmente simples: sem biblioteca externa. `.reveal` (CSS
+`@keyframes`) faz os cards entrarem com fade+slide em cascata, e o hook
+`useCountUp` anima numeros de KPI com `requestAnimationFrame` puro.
+
+### Axios
+
+Axios foi escolhido para concentrar chamadas HTTP, base URL e interceptors.
+
+No projeto:
+
+- `src/services/api.ts` cria uma unica instancia HTTP;
+- o token JWT e enviado automaticamente no header `Authorization`;
+- resposta `401` limpa a sessao local.
+
+### PNPM
+
+PNPM foi escolhido por ser rapido e previsivel para instalar dependencias.
+
+---
+
+## 3. Estrutura Atual
 
 ```text
-                           +----------------------+
-                           |   Usuario no Browser |
-                           +----------+-----------+
-                                      |
-                                      v
-                    +-----------------+-----------------+
-                    | Rotas Publicas (/, /login, /cadastro) |
-                    +-----------------+-----------------+
-                                      |
-                     submit login/cadastro (form)
-                                      |
-                                      v
-                        +-------------+-------------+
-                        | auth-provider + authService |
-                        +-------------+-------------+
-                                      |
-                           POST /auth/login ou /auth/register
-                                      |
-                                      v
-                           +----------+-----------+
-                           | Backend Spring Boot  |
-                           +----------+-----------+
-                                      |
-                         retorna token/roles/user (JWT)
-                                      |
-                                      v
-                     +----------------+----------------+
-                     | storage.ts (localStorage sessao) |
-                     +----------------+----------------+
-                                      |
-                                      v
-                     +----------------+----------------+
-                     | api.ts (Axios + Interceptors)  |
-                     | Authorization: Bearer <token>  |
-                     +----------------+----------------+
-                                      |
-                                      v
-             +------------------------+------------------------+
-             | access-control.ts calcula modulos por perfil   |
-             +------------------------+------------------------+
-                                      |
-                          renderiza apenas rotas permitidas
-                                      |
-                                      v
-                 +--------------------+--------------------+
-                 | Dashboard + Modulos privados            |
-                 | /usuarios /fazendas /pedidos ...        |
-                 +--------------------+--------------------+
-                                      |
-                     hooks/services consultam endpoints reais
-                                      |
-                                      v
-                              +-------+--------+
-                              | Resposta da API |
-                              +-------+--------+
-                                      |
-                    +-----------------+-------------------+
-                    | dados reais -> tabela/card normal   |
-                    | falha/vazio -> erro ou fallback mock|
-                    +-------------------------------------+
-```
-
-## 2. Estrutura do Monorepo
-
-```text
-nex-rural/
-  apps/
-    web/                  # Aplicacao Next.js principal
-  packages/
-    ui/                   # Componentes reutilizaveis (Button, Card, Input, cn)
-    config/               # Presets compartilhados de ESLint/TS/Tailwind
-  turbo.json
-  pnpm-workspace.yaml
+nex-rural-frontend/
+  src/
+    app/
+      (public)/               # Home, login e cadastro
+      (app)/                  # Dashboard e rotas privadas
+        dashboard/            # Cockpit operacional
+        areas-producao/       # CRUD de pasto/talhao/confinamento
+        avisos/               # CRUD de avisos de manejo
+        profissionais/        # CRUD do diretorio de contatos
+        fazendas/ maquinas/ funcionarios/ usuarios/   # Telas legadas (tabela generica)
+      globals.css             # Estilos globais e classes de layout
+      layout.tsx              # Layout raiz
+    components/
+      auth/                   # Login, cadastro e provider de autenticacao
+      backend/                # Card de diagnostico da API
+      layout/                 # Navegacao privada
+      modules/                # Tela generica de modulo/tabela (fazendas/maquinas/funcionarios/usuarios)
+      ui/                     # Button, Card, Input, Select, Field e cn
+    hooks/
+      useAuth.ts              # Acesso simples ao contexto de auth
+      useBackendStatus.ts      # Consulta endpoints de diagnostico
+      useModuleResource.ts     # Busca API e aplica fallback mock (telas legadas)
+      useDashboard.ts          # Busca GET /api/dashboard com fallback mock
+      useCrudResource.ts       # CRUD generico (list/create/update/remove) - areas/avisos/profissionais
+      useFazendas.ts           # Lista fazendas do usuario (seletores de formulario)
+      useCountUp.ts            # Anima numeros de KPI
+    lib/
+      access-control.ts       # Modulos, endpoints e permissoes por perfil
+      env.ts                  # Le e valida variaveis de ambiente
+      errors.ts                # Normaliza erros da API
+      mock-content.ts         # Dados locais de demonstracao (telas legadas)
+      mock-dashboard.ts        # Dashboard de demonstracao
+      storage.ts               # Sessao e token no localStorage
+    services/
+      api.ts                  # Cliente Axios
+      authService.ts           # Login/cadastro/logout
+      userService.ts           # Endpoint de status
+    types/
+      api.ts / auth.ts / user.ts / dashboard.ts / operacao.ts
+  .env.local.example
   package.json
+  tailwind.config.ts
+  tsconfig.json
 ```
 
-Por que esta divisao:
+---
 
-- `apps/web`: concentra regras de tela e fluxo de usuario
-- `packages/ui`: evita repetir componente visual em varios lugares
-- `packages/config`: padroniza qualidade e build entre apps
+## 4. Como Rodar
 
-## 3. Arquitetura do Frontend (`apps/web/src`)
-
-```text
-src/
-  app/                    # Rotas e layouts (publico e privado)
-  components/             # Componentes de tela (auth, nav, backend card, modulo)
-  services/               # Comunicacao HTTP com backend (axios/auth/user)
-  hooks/                  # Estado e logica reutilizavel de UI/dados
-  types/                  # Contratos TypeScript da aplicacao
-  lib/                    # Utilitarios de dominio (env, storage, acesso, erros, fallback)
-```
-
-Motivo de cada camada:
-
-- `app`: define navegacao e fluxo das paginas
-- `components`: reaproveita UI sem duplicar JSX
-- `services`: concentra endpoints e padrao de chamada HTTP
-- `hooks`: separa logica de dados da renderizacao
-- `types`: evita inconsistencias entre frontend e backend
-- `lib`: concentra regras tecnicas transversais
-
-## 4. Rotas e Layouts
-
-Rotas publicas:
-
-- `/`
-- `/login`
-- `/cadastro`
-
-Rotas privadas:
-
-- `/dashboard`
-- `/usuarios`
-- `/fazendas`
-- `/maquinas`
-- `/funcionarios`
-- `/produtos`
-- `/pedidos`
-- `/postagens`
-- `/backend-check`
-
-Decisao importante:
-
-- o menu lateral e os atalhos do painel sao montados com base em permissoes
-- rotas sem permissao nao aparecem na navegacao (nao mostra "acesso restrito")
-
-Arquivos centrais:
-
-- `apps/web/src/app/(public)/layout.tsx`
-- `apps/web/src/app/(app)/layout.tsx`
-- `apps/web/src/lib/access-control.ts`
-- `apps/web/src/components/layout/app-navigation.tsx`
-
-## 5. Fluxo de Autenticacao e Autorizacao
-
-Fluxo de login:
-
-1. Usuario envia email/senha em `login-form.tsx`
-2. `auth-provider.tsx` chama `authService.login`
-3. `authService.ts` autentica (`/auth/login`) e monta sessao
-4. Token e sessao sao salvos em `storage.ts`
-5. Interceptor de `api.ts` passa `Authorization: Bearer <token>` automaticamente
-6. Permissoes sao calculadas por `access-control.ts`
-7. Navegacao mostra apenas modulos permitidos
-
-Fluxo de cadastro:
-
-1. `signup-form.tsx` envia nome/email/senha/role
-2. `authService.register` tenta `/auth/register`
-3. Se 404, tenta fallback `/auth/signup`
-4. Sessao e token sao persistidos igual ao login
-
-Tratamento de sessao expirada:
-
-- se backend responder `401`, `api.ts` limpa storage (`clearAuthStorage`)
-
-## 6. Integracao com Backend Spring Boot
-
-Base URL da API:
-
-- `NEXT_PUBLIC_API_URL=http://localhost:8081`
-
-Endpoint de diagnostico:
-
-- `NEXT_PUBLIC_STATUS_PATH` (endpoint principal para teste GET)
-- `NEXT_PUBLIC_STATUS_PATHS` (lista de endpoints para alternar no backend-check)
-
-Arquivos principais:
-
-- `apps/web/src/services/api.ts`
-- `apps/web/src/services/authService.ts`
-- `apps/web/src/services/userService.ts`
-- `apps/web/src/components/backend/backend-status-card.tsx`
-
-Motivo dessa organizacao:
-
-- trocar ambiente fica simples via `.env.local`
-- erros ficam padronizados para interface (`createApiError`)
-- chamada HTTP fica centralizada e consistente
-
-## 7. Estrategia de Dados em Telas de Modulo
-
-Hook principal:
-
-- `apps/web/src/hooks/useModuleResource.ts`
-
-Comportamento:
-
-1. tenta buscar dados reais no endpoint do modulo
-2. se vier resposta valida, usa fonte `api`
-3. se vier vazio ou backend cair e houver fallback local, usa fonte `mock`
-4. se nao houver fallback, exibe erro normalizado
-
-Regra de negocio para TCC:
-
-- fallback local existe apenas para apoio de navegacao
-- quando backend retornar dados, a UI passa automaticamente para dados reais
-
-## 8. Variaveis de Ambiente
-
-Copie o exemplo:
+Instale o Node.js LTS. Depois habilite o PNPM via Corepack:
 
 ```bash
-cp apps/web/.env.local.example apps/web/.env.local
+corepack enable
+corepack prepare pnpm@10.18.3 --activate
 ```
 
-Exemplo recomendado:
+Instale as dependencias:
+
+```bash
+pnpm install
+```
+
+Rode o frontend:
+
+```bash
+pnpm dev
+```
+
+Abra:
+
+```text
+http://localhost:3000
+```
+
+Build de producao:
+
+```bash
+pnpm build
+```
+
+Lint:
+
+```bash
+pnpm lint
+```
+
+Se `pnpm` nao for reconhecido, o problema esta no Node/Corepack do ambiente
+(pode usar `npm install` / `npm run dev` como alternativa - o projeto nao usa
+nenhum recurso exclusivo do pnpm).
+
+---
+
+## 5. Variaveis De Ambiente
+
+Crie um arquivo `.env.local` na raiz ou copie o exemplo:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Exemplo:
 
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8081
 NEXT_PUBLIC_STATUS_PATH=/api/usuarios
-NEXT_PUBLIC_STATUS_PATHS=/api/usuarios,/api/fazendas,/api/maquinas,/api/funcionarios,/api/produtos,/api/pedidos,/api/postagens
+NEXT_PUBLIC_STATUS_PATHS=/api/usuarios,/api/fazendas,/api/maquinas,/api/funcionarios,/api/areas-producao,/api/avisos,/api/profissionais,/api/dashboard
 ```
 
-Por que estas variaveis existem:
+O que cada variavel faz:
 
-- evitar hardcode de URL e endpoint no codigo
-- permitir trocar backend sem alterar source
-- validar ambiente logo no startup (erros claros quando faltar config)
+- `NEXT_PUBLIC_API_URL`: URL base da REST API (o backend em `InteliJ_AgroMach/AgroMach`).
+- `NEXT_PUBLIC_STATUS_PATH`: endpoint principal usado em `/backend-check`.
+- `NEXT_PUBLIC_STATUS_PATHS`: lista de endpoints para testar no diagnostico.
 
-## 9. Scripts do Projeto
+---
 
-Na raiz:
+## 6. Fluxo De Autenticacao
 
-```bash
-pnpm install
-pnpm dev
+1. Usuario envia email e senha (ou nome/email/senha/perfil no cadastro).
+2. `LoginForm`/`SignupForm` chamam `login`/`register` pelo hook `useAuth`.
+3. `AuthProvider` chama `authService.login`/`authService.register`.
+4. `authService` envia `POST /auth/login` ou `POST /auth/register`.
+5. O token e o `role` (`CLIENTE`/`PRESTADOR`/`ADMIN`) sao extraidos da resposta.
+6. A sessao e salva em `localStorage`.
+7. `api.ts` passa o token em todas as proximas requisicoes.
+8. O usuario e enviado para `/dashboard`, ja com o menu filtrado pelo seu perfil.
+
+No cadastro publico, so existem duas opcoes de perfil: **Produtor/Cliente** e
+**Prestador de servico** - o backend ignora qualquer outro valor e cria como
+`CLIENTE` por padrao (proposital, e uma protecao contra escalonamento de
+privilegio: ver README do backend).
+
+Arquivos principais:
+
+- `src/components/auth/login-form.tsx`
+- `src/components/auth/signup-form.tsx`
+- `src/components/auth/auth-provider.tsx`
+- `src/services/authService.ts`
+- `src/lib/storage.ts`
+
+---
+
+## 7. O Cockpit (Dashboard)
+
+`GET /api/dashboard` devolve, para a fazenda do usuario, tudo que a tela
+inicial precisa numa unica resposta: total de funcionarios, maquinas agrupadas
+por status, areas de producao com ocupacao atual, avisos pendentes (com os
+atrasados destacados) e o clima da propriedade.
+
+O hook `useDashboard` busca esse endpoint e, se a API ainda nao responder
+(backend fora do ar, sem fazenda cadastrada), cai para um mock local
+(`src/lib/mock-dashboard.ts`) - mesma logica de "modo demonstracao" das telas
+legadas, so que tipada para esse formato especifico em vez do formato
+generico de tabela.
+
+Arquivos principais:
+
+- `src/app/(app)/dashboard/page.tsx`
+- `src/hooks/useDashboard.ts`
+- `src/lib/mock-dashboard.ts`
+- `src/types/dashboard.ts`
+
+---
+
+## 8. CRUD De Area De Producao, Aviso E Profissional
+
+Essas tres telas (`/areas-producao`, `/avisos`, `/profissionais`) sao CRUD de
+verdade (criar/editar/remover), diferente das telas legadas que so listam
+dados. Elas compartilham o hook `useCrudResource<TResponse, TRequest>(endpoint)`,
+que encapsula `list/create/update/remove` contra o mesmo formato de API nos
+tres casos.
+
+Padrao de cada pagina:
+
+1. Card de cabecalho com titulo e botao "Novo/Nova ...".
+2. Formulario (aparece/some) reusando `Field`, `Input` e `Select` de `components/ui`.
+3. Grid ou lista dos registros, com acao de Editar/Remover em cada item.
+
+`areas-producao` e `avisos` tambem usam `useFazendas` para o seletor de
+fazenda (cada area/aviso pertence a uma fazenda), e `avisos` filtra as areas
+disponiveis pela fazenda selecionada no formulario.
+
+Arquivos principais:
+
+- `src/app/(app)/areas-producao/page.tsx`
+- `src/app/(app)/avisos/page.tsx`
+- `src/app/(app)/profissionais/page.tsx`
+- `src/hooks/useCrudResource.ts`
+- `src/hooks/useFazendas.ts`
+- `src/types/operacao.ts`
+
+---
+
+## 9. Telas Legadas (Tabela Generica)
+
+`fazendas`, `maquinas`, `funcionarios` e `usuarios` ainda usam o padrao antigo:
+`ModuleResourceScreen` + `useModuleResource`, que so lista dados (sem criar/
+editar/remover pela UI ainda). Isso funciona bem para visualizar dados vindos
+do backend, mas se algum dia precisar de criar/editar essas entidades pela UI,
+o caminho recomendado e portar a tela para o mesmo padrao de
+`useCrudResource` usado em Area de Producao/Aviso/Profissional (ver secao 13).
+
+Arquivos principais:
+
+- `src/hooks/useModuleResource.ts`
+- `src/lib/mock-content.ts`
+- `src/components/modules/module-resource-screen.tsx`
+
+---
+
+## 10. Controle De Acesso
+
+O arquivo `src/lib/access-control.ts` concentra:
+
+- lista oficial de modulos (`ModuleKey`, `ALL_MODULES`);
+- rota e endpoint de cada modulo;
+- permissoes por papel de usuario (`ROLE_PERMISSIONS`);
+- ordem visual do menu (`NAV_MODULE_ORDER`).
+
+O backend so emite tres papeis (`com.agromach.entity.Role`): `CLIENTE`,
+`PRESTADOR` e `ADMIN`. O mapa de permissoes foi simplificado para essas tres
+chaves (antes tinha varias chaves - `PRODUTOR`, `OPERADOR`, `COMERCIAL`,
+`GESTOR` etc. - que o backend nunca emitia de verdade, entao nunca tinham
+efeito nenhum).
+
+```ts
+CLIENTE: ['dashboard', 'fazendas', 'maquinas', 'funcionarios', 'areas-producao', 'avisos', 'profissionais', 'backend']
 ```
 
-Scripts principais:
+---
 
-- `pnpm dev`: sobe apps via Turborepo
-- `pnpm build`: build de todos os pacotes/apps
-- `pnpm lint`: lint de todos os pacotes/apps
+## 11. Guia Visual
 
-Frontend isolado:
+Tema escuro, minimalista, com um verde vibrante como unico acento forte e
+poucas cores no total - o objetivo e sensacao premium sem poluir a tela.
 
-```bash
-pnpm --filter @nex-rural/web dev
+Decisoes visuais aplicadas:
+
+- fundo quase preto com leve gradiente radial verde nos cantos;
+- cards com borda fina translucida e sombra suave (`.surface`);
+- topbar/sidebar com efeito de vidro fosco (`backdrop-filter: blur`);
+- entrada de cards em cascata (`.reveal`) e numeros de KPI animados (`useCountUp`);
+- selo "ao vivo" com ponto pulsante no card de clima;
+- paleta: verde (acento/primario), ambar (avisos/destaque secundario), vermelho (alerta/atraso).
+
+---
+
+## 12. Teste De Conexao Com Backend
+
+1. Inicie a REST API (`InteliJ_AgroMach/AgroMach`, ver README de la).
+2. Configure `.env.local`.
+3. Rode `pnpm dev`.
+4. Entre em `/backend-check`.
+5. Escolha um endpoint e clique em `Recarregar`.
+
+Resultados possiveis:
+
+- sucesso: JSON do backend aparece na tela;
+- erro: a mensagem HTTP aparece no card;
+- modulo sem API: dados mock aparecem com aviso de demonstracao.
+
+---
+
+## 13. Como Evoluir O Projeto
+
+Para adicionar uma tela de **CRUD de verdade** (recomendado, mesmo padrao de
+Area de Producao/Aviso/Profissional):
+
+1. adicione a chave em `ModuleKey` e o objeto em `ALL_MODULES` (`access-control.ts`);
+2. adicione a chave nas permissoes de `ROLE_PERMISSIONS` que devem ver o modulo;
+3. crie o tipo de request/response em `src/types/`;
+4. crie a pagina em `src/app/(app)/novo-modulo/page.tsx` usando `useCrudResource`
+   (copie a estrutura de `areas-producao/page.tsx` - e o exemplo mais simples).
+
+Para adicionar uma tela **so de leitura** (padrao legado, mais rapido de
+escrever mas sem criar/editar/remover):
+
+1. adicione a chave em `ModuleKey`/`ALL_MODULES`/`ROLE_PERMISSIONS`;
+2. crie a pagina reaproveitando `ModuleResourceScreen`;
+3. opcionalmente adicione mock em `mock-content.ts`.
+
+```tsx
+import { ModuleResourceScreen } from '@/components/modules/module-resource-screen';
+import { getModuleByKey } from '@/lib/access-control';
+
+const moduleConfig = getModuleByKey('fazendas');
+
+export default function FazendasPage() {
+  if (!moduleConfig) {
+    return null;
+  }
+
+  return <ModuleResourceScreen module={moduleConfig} />;
+}
 ```
 
-URL local:
+---
 
-- `http://localhost:3000`
+## 14. Resumo Da Arquitetura
 
-## 10. Como Testar a Conexao com o Backend
+```text
+Browser
+  -> Next.js App Router
+  -> AuthProvider
+  -> api.ts / Axios
+  -> REST API (Spring Boot)
+  -> resposta real
+  -> cockpit / CRUD / tabela
 
-1. Garanta backend ativo em `http://localhost:8081`
-2. Configure `.env.local` com `NEXT_PUBLIC_API_URL` e `NEXT_PUBLIC_STATUS_PATH`
-3. Rode `pnpm --filter @nex-rural/web dev`
-4. Acesse `http://localhost:3000/backend-check`
-5. Clique em `Recarregar`
-
-Resultado esperado:
-
-- sucesso: payload JSON renderizado no card
-- erro: mensagem amigavel com status HTTP
-
-## 11. Mapa Rapido de Onde Mexer
-
-Para layout e paginas:
-
-- `apps/web/src/app/**`
-
-Para formularios de auth:
-
-- `apps/web/src/components/auth/**`
-
-Para regras de permissao:
-
-- `apps/web/src/lib/access-control.ts`
-
-Para endpoints e integracao:
-
-- `apps/web/src/services/**`
-
-Para storage e env:
-
-- `apps/web/src/lib/storage.ts`
-- `apps/web/src/lib/env.ts`
-
-Para componentes visuais base:
-
-- `packages/ui/src/**`
-
-## 12. VSCode
-
-Ja configurado:
-
-- `.vscode/settings.json`
-- `.vscode/extensions.json`
-
-Objetivo:
-
-- padronizar lint, sugestoes de Tailwind e TypeScript no workspace.
-
-## 13. Renomear Pasta Fisica para `nex-rural`
-
-No Windows, com VSCode/terminais fechados:
-
-```powershell
-Set-Location "c:\Users\erics\OneDrive\Desktop\patrick trabalhos\Agromach"
-Rename-Item -Path "agromachmonorepo" -NewName "nex-rural"
+Se API falhar ou vier vazia:
+  -> mock-dashboard.ts / mock-content.ts
+  -> UI mostra aviso de demonstracao
 ```
+
+O objetivo final e simples: manter o frontend bonito, navegavel e didatico
+durante o desenvolvimento, mas pronto para usar dados reais assim que a REST
+API estiver disponivel.
